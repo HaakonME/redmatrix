@@ -446,7 +446,7 @@ function bbcode($Text, $preserve_nl = false, $tryoembed = true) {
 	else
 		$observer = $a->get_observer();
 
-	// if ((strpos($Text,'[/observer]') !== false) || (strpos($Text,'[/rpost]') !== false)) {
+	if ((strpos($Text,'[/observer]') !== false) || (strpos($Text,'[/rpost]') !== false)) {
 		if ($observer) {
 			$Text = preg_replace("/\[observer\=1\](.*?)\[\/observer\]/ism", '$1', $Text);
 			$Text = preg_replace("/\[observer\=0\].*?\[\/observer\]/ism", '', $Text);
@@ -456,7 +456,7 @@ function bbcode($Text, $preserve_nl = false, $tryoembed = true) {
 			$Text = preg_replace("/\[observer\=0\](.*?)\[\/observer\]/ism", '$1', $Text);
 			$Text = preg_replace("/\[rpost(=.*?)?\](.*?)\[\/rpost\]/ism", '', $Text);
 		}
-	// }
+	}
 
 	if(get_config('system','item_cache'))
 		$channel = false;
