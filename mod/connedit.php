@@ -643,31 +643,32 @@ function connedit_content(&$a) {
 
 		foreach($global_perms as $k => $v) {
 			$thisperm = (($contact['abook_my_perms'] & $v[1]) ? "1" : '');
+			$checkinherited = ((($channel[$v[0]]) && ($channel[$v[0]] != PERMS_SPECIFIC)) ? "1" : '');
 
 			// For auto permissions (when $self is true) we don't want to look at existing
 			// permissions because they are enabled for the channel owner
-
 			if((! $self) && ($existing[$k]))
 				$thisperm = "1";
 
-			$perms[] = array('perms_' . $k, $v[3], (($contact['abook_their_perms'] & $v[1]) ? "1" : ""),$thisperm, $v[1], (($channel[$v[0]] == PERMS_SPECIFIC || $self) ? '' : '1'), $v[4]);
+			$perms[] = array('perms_' . $k, $v[3], (($contact['abook_their_perms'] & $v[1]) ? "1" : ""),$thisperm, $v[1], (($channel[$v[0]] == PERMS_SPECIFIC) ? '' : '1'), $v[4], $checkinherited);
 		}
 
 		$o .= replace_macros($tpl,array(
 
 			'$header'         => (($self) ? t('Connection Default Permissions') : sprintf( t('Connection: %s'),$contact['xchan_name'])),
-			'$autoperms'      => array('autoperms',t('Apply these permissions automatically'), ((get_pconfig(local_channel(),'system','autoperms')) ? 1 : 0), '', array(t('No'),('Yes'))),
+			'$autoperms'      => array('autoperms',t('Apply these permissions automatically'), ((get_pconfig(local_channel(),'system','autoperms')) ? 1 : 0), 'Connection requests will be approved without your interaction', array(t('No'),('Yes'))),
 			'$addr'           => $contact['xchan_addr'],
 			'$addr_text'      => t('This connection\'s address is'),
 			'$notself'        => (($self) ? '' : '1'),
 			'$self'           => (($self) ? '1' : ''),
-			'$autolbl'        => t('Apply the permissions indicated on this page to all new connections.'),
+			'$autolbl'        => t('The permissions indicated on this page will be applied to all new connections.'),
 			'$buttons'        => (($self) ? '' : $buttons),
 			'$lbl_slider'     => t('Slide to adjust your degree of friendship'),
 			'$lbl_rating'     => t('Rating'),
 			'$lbl_rating_label' => t('Slide to adjust your rating'),
 			'$lbl_rating_txt' => t('Optionally explain your rating'),
 			'$connfilter'     => feature_enabled(local_channel(),'connfilter'),
+			'$connfilter_label' => t('Custom Filter'),
 			'$incl'           => array('abook_incl',t('Only import posts with this text'), $contact['abook_incl'],t('words one per line or #tags or /patterns/, leave blank to import all posts')), 
 			'$excl'           => array('abook_excl',t('Do not import posts with this text'), $contact['abook_excl'],t('words one per line or #tags or /patterns/, leave blank to import all posts')), 
 			'$rating_text'    => array('rating_text', t('Optionally explain your rating'),$rating_text,''),
@@ -676,6 +677,11 @@ function connedit_content(&$a) {
 			'$rating_val'     => $rating_val,
 			'$slide'          => $slide,
 			'$affinity'       => $affinity,
+			'$pending_label'  => t('Connection Pending Approval'),
+			'$pending_modal_title' => t('Connection Request'),
+			'$pending_modal_body' => sprintf(t('(%s) would like to connect with you. Please approve this connection to allow communication.'), $contact['xchan_addr']),
+			'$pending_modal_approve' => t('Approve'),
+			'$pending_modal_dismiss' => t('Approve Later'),
 			'$is_pending'     => (($contact['abook_flags'] & ABOOK_FLAG_PENDING) ? 1 : ''),
 			'$unapproved'     => $unapproved,
 			'$inherited'      => t('inherited'),
@@ -687,6 +693,7 @@ function connedit_content(&$a) {
 			'$perms'          => $perms,
 			'$permlbl'        => t('Individual Permissions'),
 			'$permnote'       => t('Some permissions may be inherited from your channel\'s <a href="settings"><strong>privacy settings</strong></a>, which have higher priority than individual settings. You can <strong>not</strong> change those settings here.'),
+			'$permnote_self'  => t('Some permissions may be inherited from your channel\'s <a href="settings"><strong>privacy settings</strong></a>, which have higher priority than individual settings. You can change those settings here but they wont have any impact unless the inherited setting changes.'),
 			'$lastupdtext'    => t('Last update:'),
 			'$last_update'    => relative_date($contact['abook_connected']),
 			'$profile_select' => contact_profile_assign($contact['abook_profile']),

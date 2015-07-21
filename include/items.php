@@ -2657,11 +2657,12 @@ function item_store_update($arr,$allow_exec = false) {
 		return $ret;
 	}
 
+	$r = q("delete from term where oid = %d and otype = %d",
+		intval($orig_post_id),
+		intval(TERM_OBJ_POST)
+	);
+
 	if(is_array($terms)) {
-		$r = q("delete from term where oid = %d and otype = %d",
-			intval($orig_post_id),
-			intval(TERM_OBJ_POST)
-		);
 		foreach($terms as $t) {
 			q("insert into term (uid,oid,otype,type,term,url)
 				values(%d,%d,%d,%d,'%s','%s') ",
@@ -2673,7 +2674,6 @@ function item_store_update($arr,$allow_exec = false) {
 				dbesc($t['url'])
 			);
 		}
-
 		$arr['term'] = $terms;
 	}
 
@@ -3381,6 +3381,11 @@ function post_is_importable($item,$abook) {
 	$text = prepare_text($item['body'],$item['mimetype']);
 	$text = html2plain($text);
 
+	$lang = null;
+
+	if((strpos($abook['abook_incl'],'lang=') !== false) || (strpos($abook['abook_incl'],'lang=') !== false))
+		$lang = detect_language($text);
+
 	$tags = ((count($item['term'])) ? $item['term'] : false);
 
 	// exclude always has priority
@@ -3396,6 +3401,8 @@ function post_is_importable($item,$abook) {
 						return false;
 			}
 			elseif((strpos($word,'/') === 0) && preg_match($word,$body))
+				return false;
+			elseif((strpos($word,'lang=') === 0) && ($lang) && (strcasecmp($lang,trim(substr($word,5))) == 0))
 				return false;
 			elseif(stristr($text,$word) !== false)
 				return false;
@@ -3413,6 +3420,8 @@ function post_is_importable($item,$abook) {
 						return true;
 			}
 			elseif((strpos($word,'/') === 0) && preg_match($word,$body))
+				return true;
+			elseif((strpos($word,'lang=') === 0) && ($lang) && (strcasecmp($lang,trim(substr($word,5))) == 0))
 				return true;
 			elseif(stristr($text,$word) !== false)
 				return true;
