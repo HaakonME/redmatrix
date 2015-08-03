@@ -3373,9 +3373,8 @@ function post_is_importable($item,$abook) {
 	if(! $item)
 		return false;
 
-	if((! $abook['abook_incl']) && (! $abook['abook_excl']))
+	if(! ($abook['abook_incl'] || $abook['abook_excl']))
 		return true;
-
 
 	require_once('include/html2plain.php');
 	$text = prepare_text($item['body'],$item['mimetype']);
@@ -3383,9 +3382,9 @@ function post_is_importable($item,$abook) {
 
 	$lang = null;
 
-	if((strpos($abook['abook_incl'],'lang=') !== false) || (strpos($abook['abook_incl'],'lang=') !== false))
+	if((strpos($abook['abook_incl'],'lang=') !== false) || (strpos($abook['abook_excl'],'lang=') !== false)) {
 		$lang = detect_language($text);
-
+	}
 	$tags = ((count($item['term'])) ? $item['term'] : false);
 
 	// exclude always has priority
@@ -3762,6 +3761,9 @@ function consume_feed($xml, $importer, &$contact, $pass = 0) {
 					$author['owner_link']   = $contact['url'];
 					$author['owner_avatar'] = $contact['thumb'];
 				}
+
+				if(! post_is_importable($datarray,$contact))
+					continue;
 
 				logger('consume_feed: author ' . print_r($author,true),LOGGER_DEBUG);
 
