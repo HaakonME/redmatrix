@@ -5,7 +5,7 @@
 
 require_once('include/zot.php');
 require_once('include/crypto.php');
-
+require_once('include/menu.php');
 
 /**
  * @brief Called when creating a new channel.
@@ -555,17 +555,67 @@ function identity_basic_export($channel_id, $items = false) {
 	if($r)
 		$ret['term'] = $r;
 
-	$r = q("select * from obj where obj_channel = %d",
+
+	// make the obj output match the hubzilla file format
+
+	$datestamp = datetime_convert();
+
+	$r = q("select obj.*, term.term as obj_term, term.url as obj_url, term.imgurl as obj_imgurl, '%s' as obj_created, '%s' as obj_edited, '%s' as obj_baseurl from obj left join term on obj_obj = term.term_hash where obj_channel = %d",
+		dbesc($datestamp),
+		dbesc($datestamp),
+		dbesc(z_root()),
 		intval($channel_id)
 	);
 
 	if($r)
 		$ret['obj'] = $r;
 
+
+	$r = q("select * from app where app_channel = %d",
+		intval($channel_id)
+	);
+	if($r)
+		$ret['app'] = $r;
+
+	$r = q("select * from chatroom where cr_uid = %d",
+		intval($channel_id)
+	);
+	if($r)
+		$ret['chatroom'] = $r;
+
+
+	$r = q("select * from event where uid = %d",
+		intval($channel_id)
+	);
+	if($r)
+		$ret['event'] = $r;
+
+	$r = q("select * from item where resource_type = 'event' and uid = %d",
+		intval($channel_id)
+	);
+	if($r) {
+		$ret['event_item'] = array();
+		xchan_query($r);
+		$r = fetch_post_tags($r,true);
+		foreach($r as $rr)
+			$ret['event_item'][] = encode_item($rr,true);
+	}
+
+	$x = menu_list($channel_id);
+	if($x) {
+		$ret['menu'] = array();
+		for($y = 0; $y < count($x); $y ++) {
+			$m = menu_fetch($x[$y]['menu_name'],$channel_id,$ret['channel']['channel_hash']);
+			if($m)
+				$ret['menu'][] = menu_element($m);
+		}
+	}
+
+
 	if(! $items)
 		return $ret;
 
-	$r = q("select likes.*, item.mid from likes left join item on likes.iid = item.id where likes.channel_id = %d",
+	$r = q("select * from likes where channel_id = %d",
 		intval($channel_id)
 	);
 
@@ -583,7 +633,9 @@ function identity_basic_export($channel_id, $items = false) {
 
 	/** @warning this may run into memory limits on smaller systems */
 
-	$r = q("select * from item where (item_flags & %d)>0 and not (item_restrict & %d)>0 and uid = %d order by created",
+	/** Don't export linked resource items. we'll have to pull those out separately. */
+
+	$r = q("select * from item where (item_flags & %d) > 0 and not (item_restrict & %d) > 0 and uid = %d and resource_type = '' order by created",
 		intval(ITEM_WALL),
 		intval(ITEM_DELETED),
 		intval($channel_id)
@@ -601,15 +653,27 @@ function identity_basic_export($channel_id, $items = false) {
 
 
 
-function identity_export_year($channel_id,$year) {
+function identity_export_year($channel_id,$year,$month = 0) {
 
 	if(! $year)
 		return array();
 
+	if($month && $month <= 12) {
+		$target_month = sprintf('%02d',$month);
+		$target_month_plus = sprintf('%02d',$month+1);
+	}
+	else
+		$target_month = '01';
+
 	$ret = array();
-	$mindate = datetime_convert('UTC','UTC',$year . '-01-01 00:00:00');
-	$maxdate = datetime_convert('UTC','UTC',$year+1 . '-01-01 00:00:00');
-	$r = q("select * from item where (item_flags & %d) > 0 and (item_restrict & %d) = 0 and uid = %d and created >= '%s' and created < '%s' order by created ",
+
+	$mindate = datetime_convert('UTC','UTC',$year . '-' . $target_month . '-01 00:00:00');
+	if($month && $month < 12)
+		$maxdate = datetime_convert('UTC','UTC',$year . '-' . $target_month_plus . '-01 00:00:00');
+	else
+		$maxdate = datetime_convert('UTC','UTC',$year+1 . '-01-01 00:00:00');
+
+	$r = q("select * from item where (item_flags & %d) > 0 and (item_restrict & %d) = 0 and uid = %d and created >= '%s' and created < '%s' and resource_type = '' order by created ",
 		intval(ITEM_WALL),
 		intval(ITEM_DELETED),
 		intval($channel_id),
@@ -624,6 +688,18 @@ function identity_export_year($channel_id,$year) {
 		foreach($r as $rr)
 			$ret['item'][] = encode_item($rr,true);
 	}
+
+
+	$r = q("select item_id.*, item.mid from item_id left join item on item_id.iid = item.id where item_id.uid = %d 
+		and item.created >= '%s' and item.created < '%s' order by created ",
+		intval($channel_id),
+		dbesc($mindate), 
+		dbesc($maxdate)
+	);
+
+	if($r)
+		$ret['item_id'] = $r;
+
 
 	return $ret;
 }

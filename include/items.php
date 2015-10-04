@@ -161,7 +161,7 @@ function filter_insecure($channel_id, $arr) {
 
 	$ret = array();
 
-	if((! intval(get_config($channel_id, 'system', 'filter_insecure_collections'))) || (! $arr))
+	if((! intval(get_pconfig($channel_id, 'system', 'filter_insecure_collections'))) || (! $arr))
 		return $arr;
 
 	$str = '';
@@ -805,10 +805,15 @@ function title_is_body($title, $body) {
 }
 
 
-function get_item_elements($x) {
+function get_item_elements($x,$allow_code = false) {
+
 
 	$arr = array();
-	$arr['body']         = (($x['body']) ? htmlspecialchars($x['body'],ENT_COMPAT,'UTF-8',false) : '');
+
+	if($allow_code)
+		$arr['body'] = $x['body'];
+	else
+		$arr['body']         = (($x['body']) ? htmlspecialchars($x['body'],ENT_COMPAT,'UTF-8',false) : '');
 
 	$key = get_config('system','pubkey');
 
@@ -866,6 +871,9 @@ function get_item_elements($x) {
 
 	$arr['sig']          = (($x['signature']) ? htmlspecialchars($x['signature'],  ENT_COMPAT,'UTF-8',false) : '');
 
+	if(array_key_exists('diaspora_signature',$x) && is_array($x['diaspora_signature']))
+		$x['diaspora_signature'] = json_encode($x['diaspora_signature']);
+
 	$arr['diaspora_meta'] = (($x['diaspora_signature']) ? json_encode(crypto_encapsulate($x['diaspora_signature'],$key)) : '');
 	$arr['object']       = activity_sanitise($x['object']);
 	$arr['target']       = activity_sanitise($x['target']);
@@ -915,7 +923,6 @@ function get_item_elements($x) {
 			logger('get_item_elements: message verification failed.');
 	}
 
-
 	// if it's a private post, encrypt it in the DB.
 	// We have to do that here because we need to cleanse the input and prevent bad stuff from getting in,
 	// and we need plaintext to do that.
@@ -942,9 +949,68 @@ function get_item_elements($x) {
 		$arr['postopts'] = $x['postopts'];
 		$arr['resource_id'] = $x['resource_id'];
 		$arr['resource_type'] = $x['resource_type'];
-		$arr['item_restrict'] = $x['item_restrict'];
-		$arr['item_flags'] = $x['item_flags'];
 		$arr['attach'] = $x['attach'];
+
+		if(! array_key_exists('item_origin',$x)) {
+			$arr['item_restrict'] = $x['item_restrict'];
+			$arr['item_flags'] = $x['item_flags'];
+		}
+
+		if(array_key_exists('item_origin',$x) && intval($x['item_origin']))
+			$arr['item_flags'] |= ITEM_ORIGIN;
+		if(array_key_exists('item_unseen',$x) && intval($x['item_unseen']))
+			$arr['item_flags'] |= ITEM_UNSEEN;
+		if(array_key_exists('item_starred',$x) && intval($x['item_starred']))
+			$arr['item_flags'] |= ITEM_STARRED;
+		if(array_key_exists('item_uplink',$x) && intval($x['item_uplink']))
+			$arr['item_flags'] |= ITEM_UPLINK;
+		if(array_key_exists('item_consensus',$x) && intval($x['item_consensus']))
+			$arr['item_flags'] |= ITEM_CONSENSUS;
+		if(array_key_exists('item_wall',$x) && intval($x['item_wall']))
+			$arr['item_flags'] |= ITEM_WALL;
+		if(array_key_exists('item_thread_top',$x) && intval($x['item_thread_top']))
+			$arr['item_flags'] |= ITEM_THREAD_TOP;
+		if(array_key_exists('item_notshown',$x) && intval($x['item_notshown']))
+			$arr['item_flags'] |= ITEM_NOTSHOWN;
+		if(array_key_exists('item_nsfw',$x) && intval($x['item_nsfw']))
+			$arr['item_flags'] |= ITEM_NSFW;
+		if(array_key_exists('item_mentionsme',$x) && intval($x['item_mentionsme']))
+			$arr['item_flags'] |= ITEM_MENTIONSME;
+		if(array_key_exists('item_nocomment',$x) && intval($x['item_nocomment']))
+			$arr['item_flags'] |= ITEM_NOCOMMENT;
+		if(array_key_exists('item_retained',$x) && intval($x['item_retained']))
+			$arr['item_flags'] |= ITEM_RETAINED;
+		if(array_key_exists('item_rss',$x) && intval($x['item_rss']))
+			$arr['item_flags'] |= ITEM_RSS;
+
+
+		if(array_key_exists('item_deleted',$x)&& intval($x['item_deleted']))
+			$arr['item_restrict'] |= ITEM_DELETED;
+		if(array_key_exists('item_unpublished',$x)&& intval($x['item_unpublished']))
+			$arr['item_restrict'] |= ITEM_UNPUBLISHED;
+		if(array_key_exists('item_delayed',$x)&& intval($x['item_delayed']))
+			$arr['item_restrict'] |= ITEM_DELAYED_PUBLISH;
+		if(array_key_exists('item_pending_remove',$x)&& intval($x['item_pending_remove']))
+			$arr['item_restrict'] |= ITEM_PENDING_REMOVE;
+		if(array_key_exists('item_type',$x)) {
+			switch(intval($x['item_type'])) {
+				case 1:
+					$arr['item_restrict'] |= ITEM_BUILDBLOCK;
+					break;
+				case 2:
+					$arr['item_restrict'] |= ITEM_PDL;
+					break;
+				case 3:
+					$arr['item_restrict'] |= ITEM_WEBPAGE;
+					break;
+				case 4:
+					$arr['item_restrict'] |= ITEM_BUG;
+					break;
+				case 0:
+				default:
+					break;
+			}
+		}
 	}
 
 	return $arr;
@@ -1257,7 +1323,7 @@ function encode_item($item,$mirror = false) {
 		$x['comment_scope'] = $c_scope;
 
 	if($item['term'])
-		$x['tags']        = encode_item_terms($item['term']);
+		$x['tags']        = encode_item_terms($item['term'],$mirror);
 
 	if($item['diaspora_meta'])
 		$x['diaspora_signature'] = crypto_unencapsulate(json_decode($item['diaspora_meta'],true),$key);
@@ -1345,6 +1411,11 @@ function encode_item_terms($terms) {
 	$ret = array();
 
 	$allowed_export_terms = array( TERM_UNKNOWN, TERM_HASHTAG, TERM_MENTION, TERM_CATEGORY, TERM_BOOKMARK );
+
+	if($mirror) {
+		$allowed_export_terms[] = TERM_PCATEGORY;
+		$allowed_export_terms[] = TERM_FILE;
+	}
 
 	if($terms) {
 		foreach($terms as $term) {
@@ -3335,6 +3406,9 @@ function check_item_source($uid, $item) {
 	if($r[0]['src_channel_xchan'] === $item['owner_xchan'])
 		return false;
 
+
+	// since we now have connection filters with more features, the source filter is redundant and can probably go away
+
 	if(! $r[0]['src_patt'])
 		return true;
 
@@ -3349,10 +3423,10 @@ function check_item_source($uid, $item) {
 		foreach($words as $word) {
 			if(substr($word,0,1) === '#' && $tags) {
 				foreach($tags as $t)
-					if(($t['type'] == TERM_HASHTAG) && ((substr($t,1) === substr($word,1)) || (substr($word,1) === '*')))
+					if(($t['type'] == TERM_HASHTAG) && (($t['term'] === substr($word,1)) || (substr($word,1) === '*')))
 						return true;
 			}
-			elseif((strpos($word,'/') === 0) && preg_match($word,$body))
+			elseif((strpos($word,'/') === 0) && preg_match($word,$text))
 				return true;
 			elseif(stristr($text,$word) !== false)
 				return true;
@@ -3377,6 +3451,9 @@ function post_is_importable($item,$abook) {
 		return true;
 
 	require_once('include/html2plain.php');
+
+	unobscure($item);
+
 	$text = prepare_text($item['body'],$item['mimetype']);
 	$text = html2plain($text);
 
@@ -3396,10 +3473,10 @@ function post_is_importable($item,$abook) {
 			$word = trim($word);
 			if(substr($word,0,1) === '#' && $tags) {
 				foreach($tags as $t)
-					if(($t['type'] == TERM_HASHTAG) && ((substr($t,1) === substr($word,1)) || (substr($word,1) === '*')))
+					if(($t['type'] == TERM_HASHTAG) && (($t['term'] === substr($word,1)) || (substr($word,1) === '*')))
 						return false;
 			}
-			elseif((strpos($word,'/') === 0) && preg_match($word,$body))
+			elseif((strpos($word,'/') === 0) && preg_match($word,$text))
 				return false;
 			elseif((strpos($word,'lang=') === 0) && ($lang) && (strcasecmp($lang,trim(substr($word,5))) == 0))
 				return false;
@@ -3415,10 +3492,10 @@ function post_is_importable($item,$abook) {
 			$word = trim($word);
 			if(substr($word,0,1) === '#' && $tags) {
 				foreach($tags as $t)
-					if(($t['type'] == TERM_HASHTAG) && ((substr($t,1) === substr($word,1)) || (substr($word,1) === '*')))
+					if(($t['type'] == TERM_HASHTAG) && (($t['term'] === substr($word,1)) || (substr($word,1) === '*')))
 						return true;
 			}
-			elseif((strpos($word,'/') === 0) && preg_match($word,$body))
+			elseif((strpos($word,'/') === 0) && preg_match($word,$text))
 				return true;
 			elseif((strpos($word,'lang=') === 0) && ($lang) && (strcasecmp($lang,trim(substr($word,5))) == 0))
 				return true;
@@ -4579,10 +4656,12 @@ function zot_feed($uid,$observer_hash,$arr) {
 
 	$items = array();
 
-	/** @FIXME fix this part for PostgreSQL */
+	/** @FIXME re-unite these SQL statements. There is no need for them to be separate. The mySQL is convoluted with misuse of group by. As it stands, there is a slight difference where the postgres version doesn't remove the duplicate parents up to 100. In practice this doesn't matter. It could be made to match behavior by adding "distinct on (parent) " to the front of the selection list, at a not-worth-it performance penalty (page temp results to disk). duplicates are still ignored in the in() clause, you just get less than 100 parents if there are many children. */
 
 	if(ACTIVE_DBTYPE == DBTYPE_POSTGRES) {
-		return array();
+		$groupby = '';
+	} else {
+		$groupby = 'GROUP BY parent';
 	}
 
 	if(is_sys_channel($uid)) {
@@ -4590,7 +4669,7 @@ function zot_feed($uid,$observer_hash,$arr) {
 			WHERE uid != %d
 			AND item_private = 0 AND item_restrict = 0 AND uid in (" . stream_perms_api_uids(PERMS_PUBLIC,10,1) . ")
 			AND (item_flags &  %d) > 0
-			$sql_extra GROUP BY parent ORDER BY created ASC $limit",
+			$sql_extra $groupby ORDER BY created ASC $limit",
 			intval($uid),
 			intval(ITEM_WALL)
 		);
@@ -4599,7 +4678,7 @@ function zot_feed($uid,$observer_hash,$arr) {
 		$r = q("SELECT parent, created, postopts from item
 			WHERE uid = %d AND item_restrict = 0
 			AND (item_flags &  %d) > 0
-			$sql_extra GROUP BY parent ORDER BY created ASC $limit",
+			$sql_extra $groupby ORDER BY created ASC $limit",
 			intval($uid),
 			intval(ITEM_WALL)
 		);
